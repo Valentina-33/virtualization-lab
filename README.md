@@ -1,32 +1,32 @@
 # virtualization-lab
 
-Minimal Java web service built with Spring Boot, containerized with Docker, published to Docker
-Hub, and deployed on an Amazon EC2 virtual machine. Built for the *Containerizing and Deploying a
-Java Web Application* workshop, which explores virtualization as an architectural mechanism for
-modularity, isolation, portability, and deployment.
+Small Java web service built with Spring Boot. It is packaged as a Docker image, published to
+Docker Hub, and deployed on an Amazon EC2 virtual machine. This project was made for the
+*Containerizing and Deploying a Java Web Application* workshop, which looks at virtualization as a
+way to get modularity, isolation, portability and easy deployment.
 
 ## 1. Purpose
 
-Demonstrate the full path from source code to a running cloud deployment: package a small REST
-service as a Docker image, run multiple isolated instances of it on one machine, publish the image
-to a public registry, deploy it on a virtual machine in AWS, and reason about what that deployment
-model costs at different traffic levels.
+Show the full path from source code to a working cloud deployment: package a small REST service as
+a Docker image, run several isolated copies of it on one machine, publish the image to a public
+registry, deploy it on a virtual machine in AWS, and think about what that setup costs at
+different traffic levels.
 
 ## 2. Architecture
 
 ```
 co.edu.escuelaing
 ├── RestServiceApplication   → Spring Boot entry point. Reads the HTTP port from the PORT
-│                               environment variable (default 8081) instead of hardcoding it,
-│                               so the same built artifact/image works on any host or port.
-└── HelloRestController      → @RestController exposing GET /greeting?name=..., defaulting
-                                to "World" when no name is supplied.
+│                               environment variable (8081 by default) instead of hardcoding it,
+│                               so the same jar or image works on any host or port.
+└── HelloRestController      → @RestController that exposes GET /greeting?name=..., and
+                                answers "World" when no name is given.
 ```
 
-Two moving parts, on purpose: the entry point owns *how the app is configured and started*, the
-controller owns *what the app does*. Neither depends on where it runs (local JVM, a container on a
-laptop, or an EC2 instance) because the only environment-specific value — the port — is injected
-from outside.
+There are only two classes on purpose. The entry point takes care of how the app starts and gets
+configured. The controller takes care of what the app actually does. Neither one cares where it
+runs (a local JVM, a container on a laptop, or an EC2 instance), because the only thing that
+changes between environments, the port, comes from outside the code.
 
 ## 3. Technology stack
 
@@ -46,13 +46,13 @@ mvn clean package
 java -jar target/virtualization-lab-1.0.0.jar
 ```
 
-The server starts on port **8081** by default. Override it with the `PORT` environment variable:
+The server starts on port **8081** by default. You can change it with the `PORT` variable:
 
 ```bash
 PORT=9090 java -jar target/virtualization-lab-1.0.0.jar
 ```
 
-Verify:
+Check it works:
 
 ```bash
 curl "http://localhost:8081/greeting?name=Pedro"
@@ -76,8 +76,8 @@ curl "http://localhost:34000/greeting?name=Container"
 
 ### Container isolation
 
-Three independent instances of the same image, each with its own process and memory, mapped to
-different host ports:
+Three copies of the same image, each one its own process with its own memory, mapped to different
+ports on the host:
 
 ```bash
 docker run -d --name virtualization-lab-1 -e PORT=8081 -p 34000:8081 pvlc/virtualization-lab:1.0
@@ -85,15 +85,15 @@ docker run -d --name virtualization-lab-2 -p 34001:8081 pvlc/virtualization-lab:
 docker run -d --name virtualization-lab-3 -p 34002:8081 pvlc/virtualization-lab:1.0
 ```
 
-Each one answers independently — stopping one does not affect the others:
+Each one answers on its own. Stopping one does not affect the others:
 
-![Three isolated containers responding independently](docs/docker-isolated-containers.png)
+![Three isolated containers responding on their own](docs/docker-isolated-containers.png)
 
 ## 6. Docker Compose
 
-`compose.yaml` builds the image from the local `Dockerfile` and runs it as a single declarative
-service (no database service is defined, since this application has no persistence — adding one
-would contradict the workshop's own guidance not to add a database the app doesn't use):
+`compose.yaml` builds the image from the local `Dockerfile` and runs it as one service. There is
+no database service here, because this app does not store any data, and adding one just to have
+one would go against what the workshop asks for:
 
 ```yaml
 services:
@@ -113,7 +113,7 @@ docker compose logs web
 curl "http://localhost:8087/greeting?name=Compose"
 ```
 
-![Compose service responding on port 8087](docs/compose-local-run.png)
+![Compose service answering on port 8087](docs/compose-local-run.png)
 
 ## 7. Docker Hub
 
@@ -126,23 +126,25 @@ docker push pvlc/virtualization-lab:1.0
 docker push pvlc/virtualization-lab:latest
 ```
 
-![virtualization-lab image published on Docker Hub](docs/dockerhub-repo.png)
+![virtualization-lab image on Docker Hub](docs/dockerhub-repo.png)
 
 ## 8. AWS EC2 deployment
 
 **Instance:** Amazon Linux 2023, `t3.micro`, region `us-east-1` (N. Virginia).
-**Security group:** SSH (22) restricted to the developer's own IP; the application port open only
-to the network that needs access — no other inbound ports exposed.
+**Security group:** SSH (22) only from the developer's own IP. The application port is open only
+to the network that needs it, and no other port is exposed.
 
-Setup, once connected over SSH:
+Setup, after connecting over SSH:
 
 ```bash
 sudo yum update -y
 sudo yum install -y docker
 sudo service docker start
 sudo usermod -a -G docker ec2-user
-# log out and reconnect for the group change to take effect
+# log out and connect again so the docker group takes effect
 ```
+
+![Connecting to the instance and pulling the image](docs/ec2-ssh-connect.png)
 
 Pull and run the published image:
 
@@ -157,7 +159,7 @@ docker run -d \
   pvlc/virtualization-lab:1.0
 ```
 
-Verify:
+Check it from inside the instance:
 
 ```bash
 docker ps
@@ -165,13 +167,11 @@ docker logs virtualization-lab
 curl "http://localhost:8080/greeting?name=AWS"
 ```
 
-**Public deployment URL:** `http://<ec2-public-dns>:8080/greeting?name=AWS`
-*(fill in once the instance is running — see [`docs/ec2-deployment.png`](docs/ec2-deployment.png) and [`docs/ec2-endpoint.png`](docs/ec2-endpoint.png) below)*
+![Container running and answering on the instance](docs/ec2-deployment.png)
 
-> 📌 **Pending evidence** — add after deploying:
-> - `docs/ec2-deployment.png` — `docker ps` / `docker logs` on the instance showing the container running.
-> - `docs/ec2-endpoint.png` — the public URL responding in a browser or via `curl` from outside the instance.
-> - Replace `<ec2-public-dns>` above with the real address, and terminate the instance once the evidence is collected.
+**Public deployment URL:** `http://ec2-3-235-55-104.compute-1.amazonaws.com:8080/greeting?name=AWS`
+
+![Public URL answering from a browser](docs/ec2-endpoint.png)
 
 ## 9. Deployment model
 
@@ -180,7 +180,7 @@ flowchart TD
     Client["Client (browser / curl)"] -->|"HTTP GET /greeting?name=..."| SG
 
     subgraph VM["EC2 virtual machine (Amazon Linux 2023, t3.micro)"]
-        SG["Security Group<br/>22/tcp from developer IP only · 8080/tcp from allowed network"]
+        SG["Security Group<br/>port 22 only from the developer's IP, port 8080 open to the allowed network"]
         SG --> DE["Docker Engine"]
         DE --> C["Container: virtualization-lab<br/>Amazon Corretto 21 + Spring Boot<br/>listens on PORT=8081, published as 8080"]
     end
@@ -188,22 +188,22 @@ flowchart TD
     C -->|"Hello, name!"| Client
 ```
 
-| Layer | Responsibility |
+| Layer | What it does |
 |---|---|
-| **EC2 virtual machine** | Isolated compute, memory, storage, and network resources rented by the hour; the unit AWS bills for regardless of how many requests it serves. |
-| **Security group** | Stateful firewall controlling exactly which inbound traffic can reach the instance — SSH restricted to the developer, the app port restricted to the network that needs it. |
-| **Docker container** | Portable execution environment bundling the application with its exact runtime (Corretto 21) — the same image that ran locally, unmodified. |
-| **Java web application** | Receives HTTP requests and provides the business logic (`/greeting`), independent of the infrastructure it happens to run on. |
+| **EC2 virtual machine** | Compute, memory, storage and network you rent by the hour. This is what AWS charges for, no matter how many requests it serves. |
+| **Security group** | A firewall that decides which traffic can reach the instance. SSH is limited to the developer, the app port is limited to whoever actually needs it. |
+| **Docker container** | Packages the app together with the exact runtime it needs (Corretto 21). It is the same image that ran locally, nothing changes for the deployment. |
+| **Java web application** | Handles the HTTP requests and returns the greeting. It does not know or care what infrastructure it is running on. |
 
 ## 10. Cost analysis
 
 ### Assumptions
 
-All three scenarios use On-Demand pricing in **US East (N. Virginia)**, a Linux EBS-backed
-instance, `gp3` storage, and an average request/response pair of roughly 1 KB (a short JSON/text
-body plus HTTP headers — this endpoint returns a few words, no payload of consequence). The
-service is assumed to run **continuously** (constant usage, 730 instance-hours/month) rather than
-on a schedule, since there is no fixed traffic window to switch it off for.
+All three scenarios use On-Demand pricing in **US East (N. Virginia)**, a Linux instance with
+`gp3` storage, and an average request/response pair of around 1 KB (this endpoint just returns a
+short greeting plus HTTP headers, nothing bigger). The service is assumed to run all the time
+(constant usage, 730 instance-hours a month) instead of on a schedule, since there is no fixed time
+window where it makes sense to turn it off.
 
 | | Small workload | Medium workload | Large workload |
 |---|---|---|---|
@@ -216,89 +216,87 @@ on a schedule, since there is no fixed traffic window to switch it off for.
 | Outbound data transfer | ~1 GB | ~5 GB | ~10 GB |
 | Avg request/response size | ~1 KB | ~1 KB | ~1 KB |
 | Continuous or scheduled | Continuous | Continuous | Continuous |
-| High availability required | No | No | Yes — 2 instances for redundancy |
+| Needs high availability | No | No | Yes, 2 instances for redundancy |
 
-The jump to two instances in the Large scenario is **not** driven by raw compute demand — a single
-`t3.micro` could still serve 1,000,000 requests/month of this size without strain. It reflects an
-availability decision (no single point of failure once the service is business-critical enough to
-justify redundancy), which is the more realistic reason to add capacity for a lightweight endpoint
-like this one (see the discussion below).
+Going from one instance to two in the Large scenario is not really about needing more compute
+power. A single `t3.micro` could still handle 1,000,000 of these light requests a month without
+trouble. It is an availability decision: once the service is important enough that it cannot have
+a single point of failure, you add a second instance for redundancy. That is a more realistic
+reason to scale a lightweight service like this one, and it comes up again in the discussion below.
 
 ### AWS Pricing Calculator estimate
 
 Estimate built with the [AWS Pricing Calculator](https://calculator.aws), covering EC2 compute,
-EBS storage, and outbound data transfer for all three scenarios in one estimate.
+EBS storage and outbound data transfer for the three scenarios.
 
-**Public link (view-only, expires after 1 year):**
+**Public link (view only, expires after 1 year):**
 [calculator.aws/#/estimate?id=6ad35996aa0db59bba7d7ea2185f3181ebb09a0f](https://calculator.aws/#/estimate?id=6ad35996aa0db59bba7d7ea2185f3181ebb09a0f)
 
 ![AWS Pricing Calculator estimate summary](docs/aws-pricing-calculator.png)
-*(screenshot of the link above — see the pending-evidence note at the end of this section)*
 
 ### Cost table
 
 | Scenario | Monthly requests | Monthly infrastructure cost | Estimated cost per request | Main cost drivers |
 |---|---|---|---|---|
-| Small workload | 10,000 | USD 8.32 | USD 0.000832 | EC2 instance-hours (≈ 91% of the total); storage and transfer are marginal |
-| Medium workload | 100,000 | USD 8.68 | USD 0.0000868 | Same fixed EC2 runtime and storage; slightly more outbound transfer |
-| Large workload | 1,000,000 | USD 32.55 | USD 0.0000326 | A second `t3.small` instance for redundancy, plus its storage and transfer |
-| **Total (all three)** | 1,110,000 | **USD 49.55/month** (USD 594.60/year) | — | — |
+| Small workload | 10,000 | USD 8.32 | USD 0.000832 | The EC2 instance itself (around 91% of the total); storage and transfer barely add anything |
+| Medium workload | 100,000 | USD 8.68 | USD 0.0000868 | Same fixed instance and storage, a bit more data transfer |
+| Large workload | 1,000,000 | USD 32.55 | USD 0.0000326 | A second `t3.small` instance for redundancy, plus its own storage and transfer |
+| **Total (all three)** | 1,110,000 | **USD 49.55/month** (USD 594.60/year) | n/a | n/a |
 
 ### Architectural discussion
 
 **Why does an EC2-based deployment have a baseline monthly cost even when the application receives
 few requests?**
-EC2 bills for *reserved compute capacity over time* (instance-hours), not per request. An instance
-is a rented virtual machine that must stay running for the app to be reachable at all, whether it
-serves one request or a million that month. In the Small scenario, USD 7.59 of the USD 8.32 total
-(≈ 91%) is the `t3.micro` instance itself — storage and transfer barely move the needle, because
-they scale with actual usage while the instance cost does not.
+Because EC2 charges for the time the instance is reserved, not for how many requests it answers.
+The virtual machine has to keep running for the app to be reachable at all, whether it gets one
+request or a million that month. In the Small scenario, USD 7.59 out of the USD 8.32 total (about
+91%) is just the `t3.micro` instance. Storage and data transfer barely move the number, because
+those scale with real usage while the instance cost does not.
 
 **At which workload level does the fixed cost become less significant per request?**
-Since the instance cost stays flat while traffic grows, cost-per-request keeps falling as volume
-increases on the same instance: USD 0.000832 → USD 0.0000868 → USD 0.0000326 across the three
-scenarios, a ~25x improvement from Small to Large. There is no single threshold where the fixed
-cost "stops mattering" — it just keeps amortizing better — until the workload outgrows what one
-instance can serve, at which point a *new* fixed cost (a second instance) resets the curve.
+Since the instance cost stays the same while traffic grows, the cost per request keeps getting
+smaller as volume increases on the same instance: USD 0.000832, then USD 0.0000868, then USD
+0.0000326 across the three scenarios, about 25 times cheaper per request from Small to Large.
+There is no single point where the fixed cost stops mattering. It just keeps spreading thinner
+until the workload outgrows what one instance can handle, and then a new fixed cost (a second
+instance) resets the curve.
 
 **What would force you to move from one EC2 instance to multiple instances?**
-For an endpoint this light, not raw throughput — a single `t3.micro` could handle far more than
-1,000,000 requests/month of this size. The real forcing functions are architectural: eliminating a
-single point of failure once the service is business-critical, enabling zero-downtime rolling
-deployments, spreading load across availability zones for resilience, or (for a heavier real
-workload) hitting a memory/connection ceiling the instance size can't absorb.
+For a service this light, it is not really about how many requests it can process. A single
+`t3.micro` could handle far more than 1,000,000 requests a month of this size. The real reasons to
+add instances are architectural: removing a single point of failure once the service matters
+enough, being able to deploy new versions without downtime, spreading load across availability
+zones for resilience, or, for a heavier real workload, hitting a memory or connection limit the
+instance size cannot handle anymore.
 
 **Which additional services would a production deployment likely require?**
-An Application Load Balancer in front of multiple instances (traffic distribution plus health
-checks), a managed database (RDS) if the app gained persistence, CloudWatch for monitoring and
-alarms, automated EBS snapshot backups, a private container registry (ECR) instead of a public
-Docker Hub repository, and likely an Auto Scaling Group plus Route 53/ACM for DNS and TLS.
+A load balancer in front of several instances (to split traffic and check their health), a managed
+database if the app needed to store data, CloudWatch for monitoring and alerts, automatic backups
+for the storage, a private container registry instead of a public Docker Hub repository, and
+probably an auto scaling group plus DNS and TLS through Route 53 and ACM.
 
 **Would a serverless deployment be more cost-effective for the small-workload scenario?**
-Very likely, for this specific workload's characteristics. The Small scenario is low-volume
-(10,000 requests/month — about one every four minutes), bursty rather than steady, and each
-request does trivial, short-lived compute with no persistent state or long-running connections —
-exactly the profile serverless pricing rewards, since AWS Lambda (with API Gateway or a Function
-URL) bills per invocation and per millisecond of actual execution, with **no idle cost** between
-requests. AWS's Lambda free tier (1,000,000 requests and 400,000 GB-seconds of compute per month)
-would plausibly cover this entire scenario at USD 0, versus a fixed USD 8.32/month on EC2 that is
-paid whether or not any request ever arrives. EC2 becomes the better fit as traffic gets large and
-*steady* enough that a flat instance cost undercuts summing per-invocation charges, or when the
-workload needs something serverless handles poorly — long-lived connections, specialized runtime
-control, or latency guarantees Lambda's cold starts can't offer.
+Probably yes, for this specific case. The Small scenario is low traffic, about one request every
+four minutes, and each request does a small amount of work with no state to keep between calls.
+That is exactly the kind of workload serverless pricing is good for, since AWS Lambda only charges
+for the time it actually spends running, with no cost while it sits idle. Lambda's free tier
+(1,000,000 requests and 400,000 GB-seconds a month) would likely cover this whole scenario for
+free, compared to a fixed USD 8.32 a month on EC2 that gets charged whether a request shows up or
+not. EC2 starts making more sense once traffic is large and steady enough that a flat instance
+price beats adding up per-request charges, or when the app needs something serverless is not great
+at, like long-lived connections or predictable low latency without cold starts.
 
 ### Conclusion
 
-For the Small and Medium scenarios, EC2 is a defensible but not obviously optimal choice: it works
-correctly and the absolute cost is low (under USD 9/month), but almost all of that cost is idle
-capacity paid for regardless of traffic — a serverless deployment would likely serve the same
-workload for less. EC2 earns its keep once traffic is large and continuous enough that its fixed
-cost is spread thin (the Large scenario's USD 0.0000326/request) and once the deployment needs
-things a container on a VM gives you for free — full control over the runtime, no cold starts, and
-a straightforward path to attaching a load balancer, more instances, or other AWS services as the
-system grows. For this workshop's actual traffic (a handful of manual test requests), any of the
-three tiers is functionally interchangeable; the exercise's value is in seeing *why* the numbers
-move the way they do as volume changes, not in picking a "winning" scenario.
+For the Small and Medium scenarios, EC2 works fine and does not cost much (under USD 9 a month),
+but most of that money pays for capacity that sits idle most of the time. A serverless setup would
+probably serve the same traffic for less. EC2 starts to make more sense once traffic is high and
+steady enough that the fixed cost gets spread over a lot of requests, like the Large scenario's
+USD 0.0000326 per request, and once the deployment needs things a container on a VM gives you for
+free: full control over the runtime, no cold starts, and an easy path to add a load balancer, more
+instances, or other AWS services later. For the actual traffic this workshop generates, a handful
+of manual test requests, any of the three tiers works fine. The point of the exercise is
+understanding why the numbers change the way they do as volume grows, not picking a "winner".
 
 ## 11. Evidence
 
@@ -308,9 +306,10 @@ move the way they do as volume changes, not in picking a "winning" scenario.
 | Isolated Docker containers | [`docs/docker-isolated-containers.png`](docs/docker-isolated-containers.png) |
 | Docker Compose running locally | [`docs/compose-local-run.png`](docs/compose-local-run.png) |
 | Docker Hub repository | [`docs/dockerhub-repo.png`](docs/dockerhub-repo.png) |
-| EC2 deployment running | `docs/ec2-deployment.png` — pending |
-| Public EC2 endpoint responding | `docs/ec2-endpoint.png` — pending |
-| AWS Pricing Calculator estimate | `docs/aws-pricing-calculator.png` — pending (public link above already live) |
+| Connecting to the EC2 instance and pulling the image | [`docs/ec2-ssh-connect.png`](docs/ec2-ssh-connect.png) |
+| Container running on EC2 | [`docs/ec2-deployment.png`](docs/ec2-deployment.png) |
+| Public EC2 endpoint answering | [`docs/ec2-endpoint.png`](docs/ec2-endpoint.png) |
+| AWS Pricing Calculator estimate | [`docs/aws-pricing-calculator.png`](docs/aws-pricing-calculator.png) |
 
-A short video demonstrating the local Docker deployment and the EC2 deployment working accompanies
-this repository's submission.
+A short video showing the local Docker deployment and the EC2 deployment working goes together
+with this repository's submission.
