@@ -1,0 +1,8 @@
+services:
+  web:
+    build: .
+    container_name: virtualization-web
+    environment:
+      PORT: 8081
+    ports:
+      - "8087:8081"
